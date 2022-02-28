@@ -6,7 +6,15 @@ class MovedIssueNotDefined(GitlabSyncError):
     pass
 
 
+class MovedMergeRequestNotDefined(GitlabSyncError):
+    pass
+
+
 class IssueReferenceDuplicated(GitlabSyncError):
+    pass
+
+
+class MergeRequestReferenceDuplicated(GitlabSyncError):
     pass
 
 

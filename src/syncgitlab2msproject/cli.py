@@ -24,7 +24,7 @@ from syncgitlab2msproject.gitlab_issues import (
     get_project_issues,
 )
 from syncgitlab2msproject.helper_classes import ForceFixedWork, SetTaskTypeConservative
-from syncgitlab2msproject.sync import sync_gitlab_issues_to_ms_project
+from syncgitlab2msproject.sync import sync_gitlab_to_ms_project
 
 _logger = logging.getLogger(f"{__package__}.{__name__}")
 
@@ -236,7 +236,7 @@ def main(args):
     else:
         include_issue = functools.partial(has_not_label, label=args.ignore_label)
         with MSProject(ms_project_file.absolute()) as tasks:
-            sync_gitlab_issues_to_ms_project(
+            sync_gitlab_to_ms_project(
                 tasks, issues, WebURL(args.gitlab_url), sync_task_helper, include_issue
             )
     _logger.info("Finished syncing")

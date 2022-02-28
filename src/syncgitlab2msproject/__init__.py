@@ -12,6 +12,6 @@ finally:
 
 from .gitlab_issues import Issue
 from .ms_project import MSProject
-from .sync import sync_gitlab_issues_to_ms_project
+from .sync import sync_gitlab_to_ms_project
 
-__all__ = ["MSProject", "Issue", "sync_gitlab_issues_to_ms_project"]
+__all__ = ["MSProject", "Issue", "sync_gitlab_to_ms_project"]
