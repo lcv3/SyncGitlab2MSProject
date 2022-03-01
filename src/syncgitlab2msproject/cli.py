@@ -18,11 +18,9 @@ __copyright__ = "Carli Freudenberg"
 __license__ = "MIT"
 
 from syncgitlab2msproject.custom_types import WebURL
-from syncgitlab2msproject.gitlab_issues import (
-    get_gitlab_class,
-    get_group_issues,
-    get_project_issues,
-)
+from syncgitlab2msproject.gitlab_func import get_gitlab_class
+
+from syncgitlab2msproject.gitlab_issues import get_group_issues, get_project_issues
 from syncgitlab2msproject.helper_classes import ForceFixedWork, SetTaskTypeConservative
 from syncgitlab2msproject.sync import sync_gitlab_to_ms_project
 
