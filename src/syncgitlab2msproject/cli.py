@@ -21,6 +21,8 @@ from syncgitlab2msproject.custom_types import WebURL
 from syncgitlab2msproject.gitlab_func import get_gitlab_class
 
 from syncgitlab2msproject.gitlab_issues import get_group_issues, get_project_issues
+from syncgitlab2msproject.gitlab_merge_requests import get_group_merge_requests, get_project_merge_requests
+
 from syncgitlab2msproject.helper_classes import ForceFixedWork, SetTaskTypeConservative
 from syncgitlab2msproject.sync import sync_gitlab_to_ms_project
 
@@ -216,8 +218,10 @@ def main(args):
 
     if args.gitlab_resource_type == "project":
         get_issues_func = get_project_issues
+        get_mrs_func = get_project_merge_requests
     elif args.gitlab_resource_type == "group":
         get_issues_func = get_group_issues
+        get_mrs_func = get_group_merge_requests
     else:
         raise ValueError("Invalid Resource Type")
 
@@ -227,17 +231,23 @@ def main(args):
         sync_task_helper = SetTaskTypeConservative
 
     try:
-        issues = get_issues_func(gitlab, args.gitlab_resource_id)
+        merge_requests = get_mrs_func(gitlab, args.gitlab_resource_id)
     except ConnectionError as e:
         _logger.error(f"Error contacting gitlab instance: {e}")
         exit(64)
     else:
-        include_issue = functools.partial(has_not_label, label=args.ignore_label)
-        with MSProject(ms_project_file.absolute()) as tasks:
-            sync_gitlab_to_ms_project(
-                tasks, issues, WebURL(args.gitlab_url), sync_task_helper, include_issue
-            )
-    _logger.info("Finished syncing")
+        try:
+            issues = get_issues_func(gitlab, args.gitlab_resource_id)
+        except ConnectionError as e:
+            _logger.error(f"Error contacting gitlab instance: {e}")
+            exit(64)
+        else:
+            include_issue = functools.partial(has_not_label, label=args.ignore_label)
+            with MSProject(ms_project_file.absolute()) as tasks:
+                sync_gitlab_to_ms_project(
+                    tasks, issues, merge_requests, WebURL(args.gitlab_url), sync_task_helper, include_issue
+                )
+        _logger.info("Finished syncing issues")
 
 
 def run():

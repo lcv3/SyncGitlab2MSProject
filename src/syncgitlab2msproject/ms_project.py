@@ -321,6 +321,19 @@ class Task:
         self._set_task_val("ActualWork", convert_to_int_or_raise_exception(value))
 
     @property
+    def baseline_work(self):
+        """
+        Gets or sets the Baseline work (in minutes) for the task.
+        Read/write Variant.
+        """
+        return self._get_task().BaselineWork
+
+    @baseline_work.setter
+    def baseline_work(self, value: int):
+        self._set_task_val("BaselineWork", convert_to_int_or_raise_exception(value))
+
+
+    @property
     def estimated(self) -> bool:
         """
         True if the task duration is an estimate.

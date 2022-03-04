@@ -19,7 +19,6 @@ class MergeRequest:
     # The MergeRequest object itself is not dynamic only the contained obj is!
     __slots__ = [
         "obj",
-        "_moved_reference",
         "_fixed_group_id",
     ]
 
@@ -31,35 +30,10 @@ class MergeRequest:
         """
         self._fixed_group_id = fixed_group_id
         self.obj: GitlabMergeRequest = obj
-        self._moved_reference: Optional[MergeRequest] = None
 
     def __getattr__(self, item: str):
         """Default to get the values from the original objext"""
         return getattr(self.obj, item)
-
-    @property
-    def moved_reference(self) -> Optional["MergeRequest"]:
-        """
-        get the reference to the moved MR if defined
-
-        :exceptions MovedMergeRequestNotDefined
-        """
-        if self.moved_to_id is None:
-            return None
-        else:
-            if self._moved_reference is None:
-                raise MovedMergeRequestNotDefined(
-                    "The merge request is marked as moved but was not referenced "
-                    "in the loaded merge requests, so tracking is not possible."
-                )
-            else:
-                return self._moved_reference
-
-    @moved_reference.setter
-    def moved_reference(self, value: "MergeRequest"):
-        if not isinstance(value, MergeRequest):
-            raise ValueError("Can only set a MR object as moved reference!")
-        self._moved_reference = value
 
     def __str__(self):
         return f"'{self.title}' (ID: {self.id})"
@@ -111,38 +85,40 @@ class MergeRequest:
 
     @property
     def has_tasks(self) -> bool:
-        return self.obj.has_tasks
+        return self.obj.task_completion_status['count'] > 0
 
     @property
     def is_closed(self) -> bool:
         return str(self.obj.state).lower().strip().startswith("closed")
 
     @property
+    def is_merged(self) -> bool:
+        return str(self.obj.state).lower().strip().startswith("merged")
+
+    @property
     def is_open(self):
-        return not self.is_closed
+        return str(self.obj.state).lower().strip().startswith("open")
 
     @property
     def percentage_tasks_done(self) -> int:
         """
         Percentage of tasks done, 0 if no tasks are defined and not closed.
-        By definition always 100 if MR is closed (and not moved)
+        By definition always 100 if MR is closed or merged
 
         :exceptions MovedMergeRequestNotDefined
         """
         if self.is_closed:
-            if self.moved_to_id is not None:
-                # Needed for
-                assert self._moved_reference is not None
-                return self._moved_reference.percentage_tasks_done
             return 100
+
+        if self.is_merged:
+            return 100
+
         if not self.has_tasks:
             return 0
-        task = self.task_completion_status
-        return round(task["completed_count"] / task["count"] * 100)
 
-    @property
-    def moved_to_id(self) -> Optional[int]:
-        return self.obj.moved_to_id
+        task = self.obj.task_completion_status
+        
+        return round(task["completed_count"] / task["count"] * 100)
 
     @property
     def title(self) -> str:
@@ -159,6 +135,12 @@ class MergeRequest:
         return None
 
     @property
+    def merged_at(self) -> Optional[datetime]:
+        if (val := self.obj.merged_at) is not None:
+            return dateutil.parser.parse(val)
+        return None
+
+    @property
     def created_at(self) -> Optional[datetime]:
         if (val := self.obj.created_at) is not None:
             return dateutil.parser.parse(val)
@@ -166,7 +148,9 @@ class MergeRequest:
 
     @property
     def due_date(self) -> Optional[datetime]:
-        if (val := self.obj.due_date) is not None:
+        if (self.obj.milestone) is None:
+            return None
+        if (val := self.obj.milestone['due_date']) is not None:
             return dateutil.parser.parse(val)
         return None
 
@@ -223,6 +207,14 @@ class MergeRequest:
         return [get_user_identifier(user) for user in self.obj.assignees]
 
     @property
+    def author(self) -> str:
+        """
+        Gitlab MR Author.
+        """
+        return get_user_identifier(self.obj.author)
+
+
+    @property
     def labels(self) -> List[str]:
         """
         list of labels
@@ -246,7 +238,7 @@ class MergeRequest:
 
 def get_group_merge_requests(gitlab: Gitlab, group_id: int) -> List[MergeRequest]:
     group = gitlab.groups.get(group_id, lazy=True)
-    return [MergeRequest(merge_request) for merge_request in group.mergerequests.list(all=True)]
+    return [MergeRequest(merge_request) for merge_request in group.mergerequests.list(all=True,sort='desc')]
 
 
 def get_project_merge_requests(gitlab: Gitlab, project_id: int) -> List[MergeRequest]:

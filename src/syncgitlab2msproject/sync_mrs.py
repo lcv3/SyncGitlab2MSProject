@@ -85,50 +85,61 @@ def update_task_with_merge_request_data(
     else:
         parent_ids += [get_merge_request_ref_id(merge_request)]
 
-    if (moved_ref := merge_request.moved_reference) is not None:
-        assert moved_ref is not None
-        try:
-            return update_task_with_merge_request_data(
-                task,
-                moved_ref,
-                task_type_setter,
-                parent_ids=parent_ids,
-                ignore_merge_request=ignore_merge_request,
-            )
-        except MovedMergeRequestNotDefined:
-            logger.warning(
-                f"MR {merge_request} was moved outside of context."
-                f" Ignoring the MR. Please update the task {task} manually!"
-            )
-    elif not ignore_merge_request:
+    if not ignore_merge_request:
         set_merge_request_ref_to_task(task, merge_request)
         try:
             type_setter = task_type_setter(merge_request)
             type_setter.set_task_type_before_sync(task, is_add)
             task.name = merge_request.title
             #task.notes = merge_request.description
-            if merge_request.due_date is not None:
-                task.deadline = merge_request.due_date
-            if not task.has_children:
-                if (estimated := merge_request.time_estimated) is not None:
-                    task.work = int(estimated)
-            # Update duration in case it seems to be default
-            if task.duration == DEFAULT_DURATION and task.estimated:
-                if task.work > 0:
-                    task.duration = task.work
-            if (time_spend := merge_request.time_spent_total) is not None:
-                task.actual_work = time_spend
-            if merge_request.has_tasks or task.percent_complete == 0:
-                task.percent_complete = merge_request.percentage_tasks_done
             task.hyperlink_name = merge_request.full_ref
             task.hyperlink_address = merge_request.web_url
             task.text29 = merge_request.web_url
             task.text28 = "; ".join([f'"{label}"' for label in merge_request.labels])
-            task.actual_start = merge_request.created_at
-            if len(merge_request.assignees):
-                task.resource_names = merge_request.assignees[0]
+            task.resource_names = merge_request.author
+            if merge_request.due_date is not None:
+                task.deadline = merge_request.due_date
+
+            if not task.has_children:
+                if (estimated := merge_request.time_estimated) is not None:
+                    task.baseline_work = int(estimated)
+            # Update duration in case it seems to be default
+
             if merge_request.is_closed:
-                task.actual_finish = merge_request.closed_at
+                if (time_spend := merge_request.time_spent_total) is not None:
+                    task.work = time_spend
+                task.finish = merge_request.closed_at
+                task.percent_complete = merge_request.percentage_tasks_done
+            elif merge_request.is_merged:
+                if (time_spend := merge_request.time_spent_total) is not None:
+                    task.work = time_spend
+                task.finish = merge_request.merged_at
+                task.percent_complete = merge_request.percentage_tasks_done
+            else:
+                if (time_spend := merge_request.time_spent_total) is not None:
+                    task.actual_work = time_spend
+
+                if task.baseline_work > task.actual_work:
+                    task.work = task.baseline_work
+                elif merge_request.has_tasks or task.percent_complete == 0:
+                    task.percent_complete = merge_request.percentage_tasks_done
+                elif task.actual_work > 5 * DEFAULT_DURATION:
+                    task.work = task.actual_work + 5 * DEFAULT_DURATION
+                elif task.actual_work < DEFAULT_DURATION:
+                    task.work = task.actual_work + DEFAULT_DURATION
+                else:
+                    task.work = 2 * task.actual_work
+
+
+
+            task.start = merge_request.created_at
+
+
+#            if task.duration == DEFAULT_DURATION and task.estimated:
+#                if task.baseline_work > 0:
+#                    task.duration = task.baseline_work
+            
+
             type_setter.set_task_type_after_sync(task)
         except (MSProjectValueSetError, win32com.universal.com_error) as e:
             logger.error(
@@ -262,11 +273,7 @@ def sync_gitlab_merge_requests_to_ms_project(
     # Find moved MRs and reference them
     non_moved: List[MergeRequestRef] = []
     for merge_request in merge_requests:
-        if (ref_int_id := merge_request.moved_to_id) is not None:
-            if (ref_merge_request := find_merge_request.by_ref_id(MergeRequestRef(ref_int_id))) is not None:
-                merge_request.moved_reference = ref_merge_request
-        else:
-            non_moved.append(get_merge_request_ref_id(merge_request))
+        non_moved.append(get_merge_request_ref_id(merge_request))
 
     # get existing references and update them
     for task in tasks:
